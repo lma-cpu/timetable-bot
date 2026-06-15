@@ -1,6 +1,8 @@
 import os
+import threading
 import logging
 import datetime
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from telegram import ReplyKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
@@ -128,10 +130,32 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
 
     await update.message.reply_text(response_text, parse_mode="Markdown")
 
+
+# ... (Keep all your SUBJECTS, SCHEDULE, and handler code exactly the same) ...
+
+# 1. Create a tiny dummy web page to make Render happy
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Bot is running successfully!")
+    def log_message(self, format, *args):
+        return # Stops web logs from spamming your terminal window
+
+# 2. Run the web server helper function
+def run_health_server():
+    port = int(os.environ.get("PORT", 10000)) # Render assigns a random port
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
+
 def main():
     if not TOKEN:
         print("❌ Error: TELEGRAM_BOT_TOKEN environment variable not set!")
         return
+
+    # 3. Start the dummy website in a background thread BEFORE launching the bot
+    threading.Thread(target=run_health_server, daemon=True).start()
 
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
@@ -139,6 +163,7 @@ def main():
     
     print("🤖 Timetable bot is live online!")
     app.run_polling(drop_pending_updates=True)
+
 
 if __name__ == "__main__":
     main()
